@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Presentation Grader (Offline)</title>
+
+<style>
+  body { font-family: system-ui, sans-serif; margin: 8px; background:#fff; }
+
+  .top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.filebox {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filebox input {
+  width: 90px;        /* intentionally small */
+  max-width: 90px;
+  padding: 6px;
+  font-size: 13px;
+}
+
+.status {
+  font-size: 11px;
+  color: #666;
+  line-height: 1;
+}
+
+  .layout { width: min(100%, 520px); margin: 0 auto; }
+  :root { --gap: 10px; }
+
+  .rows { display:flex; flex-direction:column; gap: var(--gap); }
+  .row2, .row3 { display:flex; gap: var(--gap); }
+  .row3 .group { flex:1 1 0; }
+  .row2 { justify-content:center; }
+  .row2 .group { width: calc((100% - (2 * var(--gap))) / 3); flex: 0 0 auto; }
+
+  .group {
+    border-radius:14px;
+    padding:12px 8px 10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    align-items:center;
+    border:1px solid rgba(0,0,0,.25);
+    transition: background-color 120ms linear;
+  }
+
+  .controls { display:flex; flex-direction:column; gap:6px; }
+  .btn { width:64px; height:64px; border-radius:50%; border:1px solid #333; background:#fff; font-size:36px; line-height:60px; padding:0; }
+
+  /* bigger vertical swipe target */
+  .pos {
+    width:40px;
+    height:38px;
+    border-radius:999px;
+    border:1px solid #333;
+    background:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:800;
+    font-size:14px;
+    user-select:none;
+    touch-action: pan-y;
+  }
+
+  .note {
+    width:100%;
+    font-size:11px;
+    padding:4px 6px;
+    border-radius:8px;
+    border:1px solid #ccc;
+    resize:none;
+    min-height:22px;
+    max-height:60px;
+    line-height:1.2;
+  }
+  .note::placeholder{ color:#aaa; }
+
+  .footer {
+    border-top:1px solid #eee;
+    padding-top:10px;
+    margin-top:12px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+
+  .timer { display:flex; gap:8px; align-items:center; }
+  .time { font-weight:800; font-size:22px; min-width:78px; text-align:center; font-variant-numeric: tabular-nums; }
+
+  @media (max-width:420px){
+    :root{ --gap: 8px; }
+    .btn{ width:60px; height:60px; font-size:34px; line-height:56px; }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="top">
+
+  <div class="filebox">
+    <input id="session" placeholder="wed3"/>
+    <status id="status">Autosave on/>
+  </div>
+
+  <button id="export" type="button">Export</button>
+  <button id="resetAll" type="button">Reset</button>
+
+</div>
+
+<div class="layout">
+  <div class="rows">
+
+    <div class="row2">
+      <div class="group" id="group-1" data-group="1">
+        <div class="controls">
+          <button class="btn" data-action="plus">+</button>
+          <button class="btn" data-action="minus">-</button>
+        </div>
+        <div class="pos" data-role="pos">1</div>
+        <textarea class="note" data-role="note" placeholder="note"></textarea>
+      </div>
+
+      <div class="group" id="group-2" data-group="2">
+        <div class="controls">
+          <button class="btn" data-action="plus">+</button>
+          <button class="btn" data-action="minus">-</button>
+        </div>
+        <div class="pos" data-role="pos">1</div>
+        <textarea class="note" data-role="note" placeholder="note"></textarea>
+      </div>
+    </div>
+
+    <div class="row3">
+      <div class="group" id="group-3" data-group="3">
+        <div class="controls">
+          <button class="btn" data-action="plus">+</button>
+          <button class="btn" data-action="minus">-</button>
+        </div>
+        <div class="pos" data-role="pos">1</div>
+        <textarea class="note" data-role="note" placeholder="note"></textarea>
+      </div>
+
+      <div class="group" id="group-4" data-group="4">
+        <div class="controls">
+          <button class="btn" data-action="plus">+</button>
+          <button class="btn" data-action="minus">-</button>
+        </div>
+        <div class="pos" data-role="pos">1</div>
+        <textarea class="note" data-role="note" placeholder="note"></textarea>
+      </div>
+
+      <div class="group" id="group-5" data-group="5">
+        <div class="controls">
+          <button class="btn" data-action="plus">+</button>
+          <button class="btn" data-action="minus">-</button>
+        </div>
+        <div class="pos" data-role="pos">1</div>
+        <textarea class="note" data-role="note" placeholder="note"></textarea>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div>Timer</div>
+    <div class="timer">
+      <div class="time" id="tread">00:00</div>
+      <button id="tstartreset" type="button">Start</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const STORAGE_KEY = "grader_layout_v3";
+
+  const GROUPS = 5;
+  const POSITIONS = 5;
+  const MIN_SCORE = 0;
+  const MAX_SCORE = 5;
+  const DEFAULT_SCORE = 3;
+
+  let state = {
+    session: "",
+    groups: {},
+    timer: { running: false, elapsedMs: 0, startedAt: null }
+  };
+
+  let timerInterval = null;
+
+  function freshState() {
+    const groups = {};
+    for (let g = 1; g <= GROUPS; g++) {
+      groups[g] = {
+        pos: 1,
+        scores: Array(POSITIONS).fill(DEFAULT_SCORE),
+        notes: Array(POSITIONS).fill("")
+      };
+    }
+    return { session: "", groups, timer: { running:false, elapsedMs:0, startedAt:null } };
+  }
+
+  function clampScore(v) {
+    return Math.max(MIN_SCORE, Math.min(MAX_SCORE, v));
+  }
+
+  // Distinct, categorical colors for 0..5
+  function scoreToColor(score) {
+    switch (score) {
+      case 0: return "#7a0000"; // dark red
+      case 1: return "#c62828"; // light red
+      case 2: return "#ef6c00"; // orange
+      case 3: return "#f9d423"; // yellow
+      case 4: return "#9ccc65"; // very light green
+      case 5: return "#00c853"; // very bright green
+      default: return "#cccccc";
+    }
+  }
+
+  function setStatus(text) {
+    const el = document.getElementById("status");
+    if (el) el.textContent = text;
+  }
+
+  function save() {
+    state.session = (document.getElementById("session").value || "").trim();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    setStatus("Saved");
+    clearTimeout(save._t);
+    save._t = setTimeout(() => setStatus("Autosave on"), 900);
+  }
+
+  function load() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) { state = freshState(); return; }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.groups) { state = freshState(); return; }
+
+      const base = freshState();
+      state = base;
+
+      if (typeof parsed.session === "string") state.session = parsed.session;
+
+      for (let g=1; g<=GROUPS; g++) {
+        const pg = parsed.groups?.[g] || parsed.groups?.[String(g)];
+        if (!pg) continue;
+
+        const pos = Number(pg.pos);
+        state.groups[g].pos = (pos >= 1 && pos <= POSITIONS) ? pos : 1;
+
+        const scores = Array.isArray(pg.scores) ? pg.scores : [];
+        const notes  = Array.isArray(pg.notes) ? pg.notes : [];
+
+        for (let p=1; p<=POSITIONS; p++) {
+          const s = Number(scores[p-1]);
+          state.groups[g].scores[p-1] = Number.isFinite(s) ? clampScore(s) : DEFAULT_SCORE;
+          state.groups[g].notes[p-1] = (typeof notes[p-1] === "string") ? notes[p-1] : "";
+        }
+      }
+
+      if (parsed.timer && typeof parsed.timer === "object") {
+        state.timer.running = !!parsed.timer.running;
+        state.timer.elapsedMs = Number(parsed.timer.elapsedMs) || 0;
+        state.timer.startedAt = state.timer.running ? Date.now() : null;
+      }
+    } catch {
+      state = freshState();
+    }
+  }
+
+  function renderGroup(g) {
+    const card = document.getElementById(`group-${g}`);
+    if (!card) return;
+
+    const pos = state.groups[g].pos;
+    const score = state.groups[g].scores[pos-1];
+
+    const posEl = card.querySelector('[data-role="pos"]');
+    if (posEl) posEl.textContent = String(pos);
+
+    const noteEl = card.querySelector('[data-role="note"]');
+    if (noteEl && document.activeElement !== noteEl) {
+      noteEl.value = state.groups[g].notes[pos-1] || "";
+    }
+
+    card.style.backgroundColor = scoreToColor(score);
+  }
+
+  function renderAll() {
+    document.getElementById("session").value = state.session || "";
+    for (let g=1; g<=GROUPS; g++) renderGroup(g);
+    renderTimerInitial();
+    syncTimerButtonLabel();
+  }
+
+  function changeScore(g, delta) {
+    const pos = state.groups[g].pos;
+    const idx = pos - 1;
+    state.groups[g].scores[idx] = clampScore(state.groups[g].scores[idx] + delta);
+    renderGroup(g);
+    save();
+  }
+
+  function setPos(g, nextPos) {
+    state.groups[g].pos = Math.max(1, Math.min(POSITIONS, nextPos));
+    renderGroup(g);
+    save();
+  }
+
+  function attachGroupHandlers() {
+    for (let g=1; g<=GROUPS; g++) {
+      const card = document.getElementById(`group-${g}`);
+      if (!card) continue;
+
+      card.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        const action = btn.getAttribute("data-action");
+        if (action === "plus") changeScore(g, +1);
+        if (action === "minus") changeScore(g, -1);
+      });
+
+      const noteEl = card.querySelector('[data-role="note"]');
+      if (noteEl) {
+        noteEl.addEventListener("input", () => {
+          const pos = state.groups[g].pos;
+          state.groups[g].notes[pos-1] = noteEl.value;
+          save();
+        });
+      }
+
+      const posEl = card.querySelector('[data-role="pos"]');
+      if (posEl) {
+        let startY = null;
+        let active = false;
+
+        posEl.addEventListener("touchstart", (ev) => {
+          if (!ev.touches || ev.touches.length !== 1) return;
+          startY = ev.touches[0].clientY;
+          active = true;
+        }, { passive: true });
+
+        posEl.addEventListener("touchmove", (ev) => {
+          if (!active || startY === null) return;
+          const y = ev.touches[0].clientY;
+          const dy = y - startY;
+
+          const THRESH = 12;
+          if (dy <= -THRESH) { setPos(g, state.groups[g].pos + 1); active=false; startY=null; }
+          else if (dy >= THRESH) { setPos(g, state.groups[g].pos - 1); active=false; startY=null; }
+        }, { passive: true });
+
+        posEl.addEventListener("touchend", () => { active=false; startY=null; }, { passive: true });
+
+        // tap cycles forward as backup
+        posEl.addEventListener("click", () => {
+          const p = state.groups[g].pos;
+          setPos(g, p === POSITIONS ? 1 : p + 1);
+        });
+      }
+    }
+  }
+
+  function toCSV() {
+    const session = (document.getElementById("session").value || "").trim();
+    const rows = [["Session","Group","Position","Score","Note"]];
+    for (let g=1; g<=GROUPS; g++) {
+      for (let p=1; p<=POSITIONS; p++) {
+        const score = state.groups[g].scores[p-1];
+        const note = (state.groups[g].notes[p-1] || "").replace(/\n/g, " ");
+        rows.push([session, g, p, score, note]);
+      }
+    }
+    return rows.map(cols => cols.map(v => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replaceAll('"','""')}"` : s;
+    }).join(",")).join("\n");
+  }
+
+  function downloadCSV() {
+    save();
+    const blob = new Blob([toCSV()], { type:"text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `grades_${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // Reset all grades/notes/positions + timer; keep session text as-is
+  function resetAll() {
+    const keepSession = (document.getElementById("session").value || "").trim();
+    state = freshState();
+    state.session = keepSession;
+    // force timer display
+    document.getElementById("tread").textContent = "00:00";
+    renderAll();
+    save();
+  }
+
+  // TIMER
+  function formatMMSS(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  }
+
+  function timerNowMs() {
+    if (!state.timer.running) return state.timer.elapsedMs;
+    return state.timer.elapsedMs + (state.timer.startedAt ? (Date.now() - state.timer.startedAt) : 0);
+  }
+
+  function timerTick() {
+    document.getElementById("tread").textContent = formatMMSS(timerNowMs());
+  }
+
+  function renderTimerInitial() {
+    document.getElementById("tread").textContent = formatMMSS(timerNowMs());
+    if (state.timer.running && !timerInterval) {
+      timerInterval = setInterval(timerTick, 250);
+    }
+  }
+
+  function syncTimerButtonLabel() {
+    const b = document.getElementById("tstartreset");
+    if (!b) return;
+    const ms = timerNowMs();
+    if (state.timer.running) b.textContent = "Reset";
+    else b.textContent = (ms > 0 ? "Reset" : "Start");
+  }
+
+  function timerStart() {
+    if (state.timer.running) return;
+    state.timer.running = true;
+    state.timer.startedAt = Date.now();
+    if (!timerInterval) timerInterval = setInterval(timerTick, 250);
+    syncTimerButtonLabel();
+    save();
+  }
+
+  function timerReset() {
+    state.timer.running = false;
+    state.timer.elapsedMs = 0;
+    state.timer.startedAt = null;
+    document.getElementById("tread").textContent = "00:00";
+    syncTimerButtonLabel();
+    save();
+  }
+
+  function timerStartOrReset() {
+    const ms = timerNowMs();
+    if (!state.timer.running && ms === 0) timerStart();
+    else timerReset();
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    try {
+      if (document.hidden && state.timer.running) {
+        state.timer.elapsedMs = timerNowMs();
+        state.timer.running = false;
+        state.timer.startedAt = null;
+        syncTimerButtonLabel();
+        save();
+      }
+    } catch {}
+  });
+
+  window.addEventListener("DOMContentLoaded", () => {
+    load();
+    attachGroupHandlers();
+    renderAll();
+    setStatus("Autosave on");
+    save();
+
+    document.getElementById("session").addEventListener("input", save);
+    document.getElementById("export").addEventListener("click", downloadCSV);
+    document.getElementById("resetAll").addEventListener("click", resetAll);
+
+    document.getElementById("tstartreset").addEventListener("click", timerStartOrReset);
+  });
+})();
+</script>
+
+</body>
+</html>
